@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "commonplace-podcast"
+version = "0.1.0"
+description = ""
+authors = ["Bram Adams <3282661+bramses@users.noreply.github.com>"]
+readme = "README.md"
+packages = [{include = "commonplace_podcast"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pyaudio = "^0.2.13"
+requests = "^2.31.0"
+pvporcupine = "^2.2.1"
+speechrecognition = "^3.10.0"
+python-dotenv = "^1.0.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
