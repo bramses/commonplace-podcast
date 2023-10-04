@@ -17,10 +17,11 @@ load_dotenv()
 access_key = os.getenv('PV_ACCESS_KEY')
 
 TEST = True
+CHUNK_TIME = 5
 
 def call_api(command):
     if TEST:
-        print("api call sim:")
+        print("api call sim:", command)
         return
     # Replace 'your_api_url' and 'your_api_key' with your API endpoint and key
     response = requests.post(
@@ -30,37 +31,28 @@ def call_api(command):
     )
     print(response.json())  # Print the API response
 
-def recognize_command():
-    recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        print("Listening for a command...")
-        audio = recognizer.listen(source, timeout=5)
-    try:
-        command = recognizer.recognize_google(audio)
-        print(f"You said: {command}")
-        return command
-    except sr.UnknownValueError:
-        print("Could not understand audio")
-    except sr.RequestError as e:
-        print(f"Could not request results; {e}")
-    return None
+UNLOCKED = True
 
 def process_audio():
     while True:
-        time.sleep(15)
-        audio_data.seek(0)
-        audio_chunk = audio_data.read()
-        audio_data.seek(0)
-        audio_data.truncate()
-        call_api(audio_chunk)
-        wf = wave.open("audio_chunk_" + str(time.time()) + ".wav", 'wb')
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(16000)
-        wf.writeframes(audio_chunk)
-        wf.close()
+        if UNLOCKED:
+            time.sleep(CHUNK_TIME)
+            audio_data.seek(0)
+            audio_chunk = audio_data.read()
+            audio_data.seek(0)
+            audio_data.truncate()
+            call_api("AUDIO_CHUNK")
+            wf = wave.open("audio_chunk_" + str(time.time()) + ".wav", 'wb')
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(audio_chunk)
+            wf.close()
+        else:
+            continue
 
 def wake_word_detection():
+    global UNLOCKED
     porcupine = pvporcupine.create(access_key=access_key, keywords=["jarvis"])
     pa = pyaudio.PyAudio()
     audio_stream = pa.open(
@@ -76,16 +68,19 @@ def wake_word_detection():
 
     try:
         while True:
-            pcm = audio_stream.read(porcupine.frame_length)
+            if audio_stream is not None and not audio_stream.is_active():  # Check if the stream is still open
+                break
+            try:
+                pcm = audio_stream.read(porcupine.frame_length)
+            except OSError as e:
+                if e.errno == -9981:
+                    continue  # Ignore buffer overflow and continue
+                else:
+                    raise e  # Re-raise exception if it's not a buffer overflow
             pcm = struct.unpack_from("h" * porcupine.frame_length, pcm)
             keyword_index = porcupine.process(pcm)
             if keyword_index >= 0:
                 print(f'Wake word detected: {"jarvis"}')
-                audio_stream.stop_stream()
-                command = recognize_command()
-                if command:
-                    call_api(command)
-                audio_stream.start_stream()
     except KeyboardInterrupt:
         print('Stopping ...')
     finally:
@@ -119,6 +114,7 @@ try:
         audio_data.write(data)
 except KeyboardInterrupt:
     print("Stopping script...")
+    # wait 3 seconds for threads to finish
     stream.stop_stream()
     stream.close()
     p.terminate()
